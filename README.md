@@ -16,7 +16,7 @@ A production-ready Authentication & User Management backend featuring JWT authen
 ![Swagger](https://img.shields.io/badge/Swagger-85EA2D?style=for-the-badge&logo=swagger&logoColor=black)
 ![Throttler](https://img.shields.io/badge/Rate_Limiting-FF6B6B?style=for-the-badge)
 ![dotenv](https://img.shields.io/badge/dotenv-ECD53F?style=for-the-badge&logo=dotenv&logoColor=black)
-![Postman](https://img.shields.io/badge/Postman-FF6C37?style=for-the-badge&logo=postman&logoColor=white)
+![HTTPie](https://img.shields.io/badge/HTTPie-121212?style=for-the-badge&logo=httpie&logoColor=white)
 ![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)
 
 ## ✨ Features
