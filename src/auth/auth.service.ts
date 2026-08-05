@@ -26,11 +26,13 @@ export class AuthService {
     id: string;
     email: string;
     role: Roles;
+    tokenVersion: number;
   }) {
     const payload = {
       sub: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: user.tokenVersion,
     };
 
     const [accessToken, refreshToken] = await Promise.all([
@@ -76,41 +78,34 @@ export class AuthService {
     }
 
     const existingUsername = await this.prisma.user.findUnique({
-      where: {
-        username,
-      },
+      where: { username },
     });
 
     if (existingUsername) {
       throw new BadRequestException('Username already exists');
     }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const token = crypto.randomBytes(32).toString('hex');
+
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
     const user = await this.prisma.user.create({
       data: {
         username,
         email,
         password: hashedPassword,
-        verificationToken: verificationToken,
+        verificationToken: hashedToken,
+        verificationTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       },
     });
 
-    const tokens = await this.generateTokens(user);
-
-    await this.updateRefreshToken(user.id, tokens.refreshToken);
-
-    await this.mailService.sendVerificationEmail(user.email, verificationToken);
+    await this.mailService.sendVerificationEmail(user.email, token);
 
     return {
-      ...tokens,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-      },
+      message:
+        'Registration successful. Please verify your email before logging in.',
     };
   }
 
@@ -127,6 +122,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.isActive) {
+      throw new UnauthorizedException('Your account has been suspended.');
+    }
+
     const correctPassword = await bcrypt.compare(password, user.password);
 
     if (!correctPassword) {
@@ -141,6 +140,13 @@ export class AuthService {
 
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        lastLoginAt: new Date(),
+      },
+    });
+
     return {
       ...tokens,
       user: {
@@ -153,14 +159,23 @@ export class AuthService {
   }
 
   async verifyEmail(token: string) {
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
     const user = await this.prisma.user.findFirst({
       where: {
-        verificationToken: token,
+        verificationToken: hashedToken,
       },
     });
 
     if (!user) {
       throw new BadRequestException('Invalid verification token');
+    }
+
+    if (
+      !user.verificationTokenExpiresAt ||
+      user.verificationTokenExpiresAt < new Date()
+    ) {
+      throw new BadRequestException('Verification token has expired');
     }
 
     await this.prisma.user.update({
@@ -170,6 +185,7 @@ export class AuthService {
       data: {
         emailVerified: true,
         verificationToken: null,
+        verificationTokenExpiresAt: null,
       },
     });
 
