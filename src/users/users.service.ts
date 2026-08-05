@@ -190,9 +190,25 @@ export class UsersService {
     };
   }
 
-  async suspendUser(id: string) {
+  async suspendUser(adminId: string, userId: string) {
+    if (adminId === userId) {
+      throw new BadRequestException('You cannot suspend your own account.');
+    }
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!existingUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!existingUser.isActive) {
+      throw new BadRequestException('User is already suspended');
+    }
+
     const user = await this.prisma.user.update({
-      where: { id },
+      where: { id: userId },
       data: {
         isActive: false,
         hashedRefreshToken: null,
@@ -221,15 +237,37 @@ export class UsersService {
   }
 
   async activateUser(id: string) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!existingUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (existingUser.isActive) {
+      throw new BadRequestException('User is already active');
+    }
+
     const user = await this.prisma.user.update({
       where: { id },
       data: {
         isActive: true,
+        tokenVersion: {
+          increment: 1,
+        },
       },
       select: {
         id: true,
         username: true,
+        email: true,
+        role: true,
+        emailVerified: true,
         isActive: true,
+        lastLoginAt: true,
+        tokenVersion: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
 
@@ -258,17 +296,59 @@ export class UsersService {
     };
   }
 
-  async deleteUser(id: string) {
+  async deleteOwnAccount(userId: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id },
+      where: { id: userId },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        hashedRefreshToken: null,
+        tokenVersion: {
+          increment: 1,
+        },
+      },
+    });
+
     await this.prisma.user.delete({
-      where: { id },
+      where: { id: userId },
+    });
+
+    return {
+      message: 'User deleted successfully',
+    };
+  }
+
+  async deleteUserByAdmin(adminId: string, userId: string) {
+    if (adminId === userId) {
+      throw new BadRequestException('You cannot delete your own account.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        hashedRefreshToken: null,
+        tokenVersion: {
+          increment: 1,
+        },
+      },
+    });
+
+    await this.prisma.user.delete({
+      where: { id: userId },
     });
 
     return {
