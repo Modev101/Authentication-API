@@ -1,11 +1,12 @@
 import { Roles } from '@prisma/client';
 import { Request } from 'express';
 
-export type JwtPayload = {
+export interface JwtPayload {
   sub: string;
   email: string;
   role: Roles;
-};
+  tokenVersion: number;
+}
 
 export type JwtUser = {
   userId: string;
