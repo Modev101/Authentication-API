@@ -19,6 +19,9 @@ model User {
   password     String
   role         Roles    @default(USER)
 
+  emailVerified Boolean @default(false)
+  verificationToken String?
+  
   hashedRefreshToken String?
 
   createdAt    DateTime @default(now())
