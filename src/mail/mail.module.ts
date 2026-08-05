@@ -14,6 +14,9 @@ import { MailService } from './mail.service';
           pass: process.env.SMTP_PASSWORD,
         },
       },
+      defaults: {
+        from: process.env.SMTP_FROM,
+      },
     }),
   ],
   providers: [MailService],
