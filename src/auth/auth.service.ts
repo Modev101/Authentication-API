@@ -10,12 +10,15 @@ import { LoginUserDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import { Roles } from '@prisma/client';
 import { JwtPayload } from 'src/types';
+import * as crypto from 'crypto';
+import { MailService } from 'src/mail/mail.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly mailService: MailService,
   ) {}
   private async generateTokens(user: {
     id: string;
@@ -81,17 +84,22 @@ export class AuthService {
     }
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+
     const user = await this.prisma.user.create({
       data: {
         username,
         email,
         password: hashedPassword,
+        verificationToken: verificationToken,
       },
     });
 
     const tokens = await this.generateTokens(user);
 
     await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+    await this.mailService.sendVerificationEmail(user.email, verificationToken);
 
     return {
       ...tokens,
@@ -123,6 +131,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.emailVerified) {
+      throw new UnauthorizedException('Please verify your email.');
+    }
+
     const tokens = await this.generateTokens(user);
 
     await this.updateRefreshToken(user.id, tokens.refreshToken);
@@ -135,6 +147,32 @@ export class AuthService {
         email: user.email,
         role: user.role,
       },
+    };
+  }
+
+  async verifyEmail(token: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        verificationToken: token,
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid verification token');
+    }
+
+    await this.prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        emailVerified: true,
+        verificationToken: null,
+      },
+    });
+
+    return {
+      message: 'Email verified successfully',
     };
   }
 
