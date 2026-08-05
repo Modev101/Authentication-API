@@ -12,6 +12,7 @@ import { Roles } from '@prisma/client';
 import { JwtPayload } from 'src/types';
 import * as crypto from 'crypto';
 import { MailService } from 'src/mail/mail.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
@@ -174,6 +175,40 @@ export class AuthService {
 
     return {
       message: 'Email verified successfully',
+    };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        email: dto.email,
+      },
+    });
+
+    if (!user) {
+      return {
+        message: 'If an account exists, a password reset email has been sent.',
+      };
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+
+    const hashedToken = await bcrypt.hash(token, 10);
+
+    await this.prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        resetPasswordToken: hashedToken,
+        resetPasswordExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      },
+    });
+
+    await this.mailService.sendResetPasswordEmail(user.email, token);
+
+    return {
+      message: 'If an account exists, a password reset email has been sent.',
     };
   }
 

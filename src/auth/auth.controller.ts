@@ -12,6 +12,7 @@ import { RegisterUserDto } from './dto/register.dto';
 import { LoginUserDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt.auth.guard';
 import * as types from 'src/types';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth')
@@ -29,6 +30,11 @@ export class AuthController {
   verifyEmail(@Query('token') token: string) {
     return this.authService.verifyEmail(token);
   }
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
