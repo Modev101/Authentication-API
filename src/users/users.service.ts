@@ -7,22 +7,60 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { UpdateUserInfoDto } from './dto/update-user-info.dto';
 import * as bcrypt from 'bcrypt';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { Roles } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getAllUsers() {
-    return this.prisma.user.findMany({
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+  async getAllUsers(page = 1, limit = 10, search?: string) {
+    const skip = (page - 1) * limit;
+
+    const where = search
+      ? {
+          OR: [
+            {
+              username: {
+                contains: search,
+                mode: 'insensitive' as const,
+              },
+            },
+            {
+              email: {
+                contains: search,
+                mode: 'insensitive' as const,
+              },
+            },
+          ],
+        }
+      : {};
+
+    const [users, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          role: true,
+          emailVerified: true,
+          lastLoginAt: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.user.count({
+        where,
+      }),
+    ]);
+
+    return {
+      users,
+      total,
+      page,
+      limit,
+    };
   }
 
   async getUserProfile(userId: string) {
@@ -124,17 +162,99 @@ export class UsersService {
       throw new BadRequestException('Current password is incorrect');
     }
 
+    const samePassword = await bcrypt.compare(
+      changePasswordDto.newPassword,
+      user.password,
+    );
+
+    if (samePassword) {
+      throw new BadRequestException(
+        'New password must be different from the current password',
+      );
+    }
+
     const hashedPassword = await bcrypt.hash(changePasswordDto.newPassword, 10);
 
     await this.prisma.user.update({
       where: { id: userId },
       data: {
         password: hashedPassword,
+
+        // Logout from every device
+        hashedRefreshToken: null,
       },
     });
 
     return {
-      message: 'Password changed successfully',
+      message: 'Password changed successfully. Please login again.',
+    };
+  }
+
+  async suspendUser(id: string) {
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: {
+        isActive: false,
+        hashedRefreshToken: null,
+        tokenVersion: {
+          increment: 1,
+        },
+      },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        emailVerified: true,
+        isActive: true,
+        lastLoginAt: true,
+        tokenVersion: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return {
+      message: 'User suspended successfully',
+      user,
+    };
+  }
+
+  async activateUser(id: string) {
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: {
+        isActive: true,
+      },
+      select: {
+        id: true,
+        username: true,
+        isActive: true,
+      },
+    });
+
+    return {
+      message: 'User activated successfully',
+      user,
+    };
+  }
+
+  async changeRole(id: string, role: Roles) {
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: {
+        role,
+      },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+      },
+    });
+
+    return {
+      message: 'Role updated successfully',
+      user,
     };
   }
 

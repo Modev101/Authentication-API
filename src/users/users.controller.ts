@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Patch,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { UsersService } from './users.service';
 import * as types from 'src/types';
 import { UpdateUserInfoDto } from './dto/update-user-info.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ChangeRoleDto } from './dto/change-role.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
@@ -23,8 +25,12 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
   @Get('admin')
   @HasRoles(Roles.ADMIN)
-  adminRoute() {
-    return this.usersService.getAllUsers();
+  getUsers(
+    @Query('page') page = '1',
+    @Query('limit') limit = '10',
+    @Query('search') search?: string,
+  ) {
+    return this.usersService.getAllUsers(Number(page), Number(limit), search);
   }
 
   @Get('profile')
@@ -32,6 +38,7 @@ export class UsersController {
   getUserProfile(@Req() req: types.AuthRequest) {
     return this.usersService.getUserProfile(req.user.userId);
   }
+
   @Patch('profile')
   @HasRoles(Roles.USER)
   updateUserData(
@@ -40,6 +47,7 @@ export class UsersController {
   ) {
     return this.usersService.updateUserProfile(req.user.userId, userData);
   }
+
   @Patch('profile/change-password')
   @HasRoles(Roles.USER)
   changePassword(
@@ -48,11 +56,29 @@ export class UsersController {
   ) {
     return this.usersService.changePassword(req.user.userId, dto);
   }
+
   @Delete('profile')
   @HasRoles(Roles.USER)
   deleteUser(@Req() req: types.AuthRequest) {
     return this.usersService.deleteUser(req.user.userId);
   }
+  @Patch(':id/suspend')
+  @HasRoles(Roles.ADMIN)
+  suspend(@Param('id') id: string) {
+    return this.usersService.suspendUser(id);
+  }
+
+  @Patch(':id/activate')
+  @HasRoles(Roles.ADMIN)
+  activate(@Param('id') id: string) {
+    return this.usersService.activateUser(id);
+  }
+  @Patch(':id/role')
+  @HasRoles(Roles.ADMIN)
+  changeRole(@Param('id') id: string, @Body() dto: ChangeRoleDto) {
+    return this.usersService.changeRole(id, dto.role);
+  }
+
   @Delete('/:id')
   @HasRoles(Roles.ADMIN)
   deleteUserAdmin(@Param('id') id: string) {
