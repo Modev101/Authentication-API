@@ -12,6 +12,7 @@ import { Roles } from '@prisma/client';
 import { JwtPayload } from 'src/types';
 import * as crypto from 'crypto';
 import { MailService } from 'src/mail/mail.service';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -173,6 +174,54 @@ export class AuthService {
 
     return {
       message: 'Email verified successfully',
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const users = await this.prisma.user.findMany({
+      where: {
+        resetPasswordExpiresAt: {
+          gt: new Date(),
+        },
+      },
+    });
+
+    let matchedUser: (typeof users)[number] | null = null;
+
+    for (const user of users) {
+      if (!user.resetPasswordToken) {
+        continue;
+      }
+
+      const matches = await bcrypt.compare(dto.token, user.resetPasswordToken);
+
+      if (matches) {
+        matchedUser = user;
+        break;
+      }
+    }
+
+    if (!matchedUser) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+
+    await this.prisma.user.update({
+      where: {
+        id: matchedUser.id,
+      },
+      data: {
+        password: hashedPassword,
+        resetPasswordToken: null,
+        resetPasswordExpiresAt: null,
+
+        hashedRefreshToken: null,
+      },
+    });
+
+    return {
+      message: 'Password reset successfully',
     };
   }
 
