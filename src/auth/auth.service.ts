@@ -14,6 +14,9 @@ import * as crypto from 'crypto';
 import { MailService } from 'src/mail/mail.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { AuditService } from 'src/audit/audit.service';
+import { AuditAction } from 'src/audit/audit-action.enum';
+import { Request } from 'express';
 
 @Injectable()
 export class AuthService {
@@ -21,6 +24,7 @@ export class AuthService {
     private prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
+    private auditService: AuditService,
   ) {}
   private async generateTokens(user: {
     id: string;
@@ -103,13 +107,17 @@ export class AuthService {
 
     await this.mailService.sendVerificationEmail(user.email, token);
 
+    await this.auditService.log({
+      action: AuditAction.REGISTER,
+      userId: user.id,
+    });
     return {
       message:
         'Registration successful. Please verify your email before logging in.',
     };
   }
 
-  async loginUser(userData: LoginUserDto) {
+  async loginUser(userData: LoginUserDto, req: Request) {
     const { email, password } = userData;
 
     const user = await this.prisma.user.findUnique({
@@ -146,7 +154,13 @@ export class AuthService {
         lastLoginAt: new Date(),
       },
     });
-
+    await this.auditService.log({
+      action: AuditAction.LOGIN,
+      userId: user.id,
+      performedById: user.id,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
     return {
       ...tokens,
       user: {
@@ -188,7 +202,10 @@ export class AuthService {
         verificationTokenExpiresAt: null,
       },
     });
-
+    await this.auditService.log({
+      action: AuditAction.VERIFY_EMAIL,
+      userId: user.id,
+    });
     return {
       message: 'Email verified successfully',
     };
@@ -222,7 +239,10 @@ export class AuthService {
     });
 
     await this.mailService.sendResetPasswordEmail(user.email, token);
-
+    await this.auditService.log({
+      action: AuditAction.FORGOT_PASSWORD,
+      userId: user.id,
+    });
     return {
       message: 'If an account exists, a password reset email has been sent.',
     };
@@ -270,7 +290,10 @@ export class AuthService {
         hashedRefreshToken: null,
       },
     });
-
+    await this.auditService.log({
+      action: AuditAction.RESET_PASSWORD,
+      userId: matchedUser.id,
+    });
     return {
       message: 'Password reset successfully',
     };
@@ -316,7 +339,10 @@ export class AuthService {
         hashedRefreshToken: null,
       },
     });
-
+    await this.auditService.log({
+      action: AuditAction.LOGOUT,
+      userId,
+    });
     return {
       message: 'Logged out successfully',
     };

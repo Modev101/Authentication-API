@@ -15,6 +15,7 @@ import * as types from 'src/types';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Throttle } from '@nestjs/throttler';
+import type { Request as ExpressRequest } from 'express';
 
 @Controller('auth')
 export class AuthController {
@@ -27,10 +28,9 @@ export class AuthController {
 
   @Post('login')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
-  async loginUser(@Body() userData: LoginUserDto) {
-    return this.authService.loginUser(userData);
+  loginUser(@Body() dto: LoginUserDto, @Req() req: ExpressRequest) {
+    return this.authService.loginUser(dto, req);
   }
-
   @Get('verify-email')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   verifyEmail(@Query('token') token: string) {

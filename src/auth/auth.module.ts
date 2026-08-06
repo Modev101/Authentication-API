@@ -6,12 +6,14 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { MailModule } from 'src/mail/mail.module';
+import { AuditModule } from 'src/audit/audit.module';
 
 @Module({
   imports: [
     PrismaModule,
     PassportModule,
     MailModule,
+    AuditModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: {
