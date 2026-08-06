@@ -35,4 +35,41 @@ model User {
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  auditLogs AuditLog[]
+  performedActions AuditLog[] @relation("PerformedBy")
+}
+
+enum AuditAction {
+  REGISTER
+  LOGIN
+  LOGOUT
+  FORGOT_PASSWORD
+  CHANGE_PASSWORD
+  RESET_PASSWORD
+  VERIFY_EMAIL
+  UPDATE_PROFILE
+  DELETE_ACCOUNT
+
+  ADMIN_DELETE_USER
+  ADMIN_SUSPEND_USER
+  ADMIN_ACTIVATE_USER
+  ADMIN_CHANGE_ROLE
+}
+
+model AuditLog {
+  id        String      @id @default(uuid())
+
+  action    AuditAction
+
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  performedById String?
+  performedBy   User? @relation("PerformedBy", fields: [performedById], references: [id], onDelete: SetNull)
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
 }
