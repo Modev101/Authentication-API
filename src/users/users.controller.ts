@@ -19,11 +19,15 @@ import { UpdateUserInfoDto } from './dto/update-user-info.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { Throttle } from '@nestjs/throttler';
+import { AuditService } from 'src/audit/audit.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private auditService: AuditService,
+  ) {}
   @Get('admin')
   @HasRoles(Roles.ADMIN)
   @Throttle({ default: { limit: 30, ttl: 60000 } })
@@ -40,6 +44,12 @@ export class UsersController {
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   getUserProfile(@Req() req: types.AuthRequest) {
     return this.usersService.getUserProfile(req.user.userId);
+  }
+
+  @Get('audit-logs')
+  @HasRoles(Roles.ADMIN)
+  getAuditLogs() {
+    return this.auditService.getLogs();
   }
 
   @Patch('profile')
@@ -72,26 +82,31 @@ export class UsersController {
   @HasRoles(Roles.ADMIN)
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   suspend(@Req() req: types.AuthRequest, @Param('id') id: string) {
-    return this.usersService.suspendUser(req.user.userId, id);
+    return this.usersService.suspendUser(req.user.userId, id, req);
   }
 
   @Patch(':id/activate')
   @HasRoles(Roles.ADMIN)
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  activate(@Param('id') id: string) {
-    return this.usersService.activateUser(id);
+  activate(@Req() req: types.AuthRequest, @Param('id') id: string) {
+    return this.usersService.activateUser(req.user.userId, id, req);
   }
+
   @Patch(':id/role')
   @HasRoles(Roles.ADMIN)
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  changeRole(@Param('id') id: string, @Body() dto: ChangeRoleDto) {
-    return this.usersService.changeRole(id, dto.role);
+  changeRole(
+    @Req() req: types.AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: ChangeRoleDto,
+  ) {
+    return this.usersService.changeRole(req.user.userId, id, dto.role, req);
   }
 
-  @Delete('/:id')
+  @Delete(':id')
   @HasRoles(Roles.ADMIN)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   deleteUserAdmin(@Req() req: types.AuthRequest, @Param('id') id: string) {
-    return this.usersService.deleteUserByAdmin(req.user.userId, id);
+    return this.usersService.deleteUserByAdmin(req.user.userId, id, req);
   }
 }

@@ -7,11 +7,16 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { UpdateUserInfoDto } from './dto/update-user-info.dto';
 import * as bcrypt from 'bcrypt';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { Roles } from '@prisma/client';
+import { AuditAction, Roles } from '@prisma/client';
+import { AuditService } from 'src/audit/audit.service';
+import { Request } from 'express';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private auditService: AuditService,
+  ) {}
 
   async getAllUsers(page = 1, limit = 10, search?: string) {
     const skip = (page - 1) * limit;
@@ -61,6 +66,30 @@ export class UsersService {
       page,
       limit,
     };
+  }
+
+  async getLogs() {
+    return this.prisma.auditLog.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            email: true,
+          },
+        },
+        performedBy: {
+          select: {
+            id: true,
+            username: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
   }
 
   async getUserProfile(userId: string) {
@@ -137,7 +166,10 @@ export class UsersService {
         updatedAt: true,
       },
     });
-
+    await this.auditService.log({
+      action: AuditAction.UPDATE_PROFILE,
+      userId,
+    });
     return {
       message: 'User updated successfully',
       user: updatedUser,
@@ -184,13 +216,16 @@ export class UsersService {
         hashedRefreshToken: null,
       },
     });
-
+    await this.auditService.log({
+      action: AuditAction.CHANGE_PASSWORD,
+      userId,
+    });
     return {
       message: 'Password changed successfully. Please login again.',
     };
   }
 
-  async suspendUser(adminId: string, userId: string) {
+  async suspendUser(adminId: string, userId: string, req: Request) {
     if (adminId === userId) {
       throw new BadRequestException('You cannot suspend your own account.');
     }
@@ -229,16 +264,22 @@ export class UsersService {
         updatedAt: true,
       },
     });
-
+    await this.auditService.log({
+      action: AuditAction.ADMIN_SUSPEND_USER,
+      userId,
+      performedById: adminId,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
     return {
       message: 'User suspended successfully',
       user,
     };
   }
 
-  async activateUser(id: string) {
+  async activateUser(adminId: string, userId: string, req: Request) {
     const existingUser = await this.prisma.user.findUnique({
-      where: { id },
+      where: { id: userId },
     });
 
     if (!existingUser) {
@@ -250,7 +291,7 @@ export class UsersService {
     }
 
     const user = await this.prisma.user.update({
-      where: { id },
+      where: { id: userId },
       data: {
         isActive: true,
         tokenVersion: {
@@ -271,15 +312,23 @@ export class UsersService {
       },
     });
 
+    await this.auditService.log({
+      action: AuditAction.ADMIN_ACTIVATE_USER,
+      userId,
+      performedById: adminId,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
     return {
       message: 'User activated successfully',
       user,
     };
   }
 
-  async changeRole(id: string, role: Roles) {
+  async changeRole(adminId: string, userId: string, role: Roles, req: Request) {
     const user = await this.prisma.user.update({
-      where: { id },
+      where: { id: userId },
       data: {
         role,
       },
@@ -289,7 +338,13 @@ export class UsersService {
         role: true,
       },
     });
-
+    await this.auditService.log({
+      action: AuditAction.ADMIN_CHANGE_ROLE,
+      userId,
+      performedById: adminId,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
     return {
       message: 'Role updated successfully',
       user,
@@ -318,13 +373,16 @@ export class UsersService {
     await this.prisma.user.delete({
       where: { id: userId },
     });
-
+    await this.auditService.log({
+      action: AuditAction.DELETE_ACCOUNT,
+      userId,
+    });
     return {
       message: 'User deleted successfully',
     };
   }
 
-  async deleteUserByAdmin(adminId: string, userId: string) {
+  async deleteUserByAdmin(adminId: string, userId: string, req: Request) {
     if (adminId === userId) {
       throw new BadRequestException('You cannot delete your own account.');
     }
@@ -350,7 +408,13 @@ export class UsersService {
     await this.prisma.user.delete({
       where: { id: userId },
     });
-
+    await this.auditService.log({
+      action: AuditAction.ADMIN_DELETE_USER,
+      userId,
+      performedById: adminId,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
     return {
       message: 'User deleted successfully',
     };
